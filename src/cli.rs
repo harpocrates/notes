@@ -1,28 +1,30 @@
 use bincode::rustc_serialize::{encode_into, decode_from};
 use getopts::Options;
 use std::fs::File;
-use std::collections::BTreeSet;
 use std::collections::BTreeMap;
 use std::env;
 use bincode::SizeLimit;
 use std::path::Path;
+use rand;
+
+use note;
 
 // Load notes from cache
-fn load_from_cache(location: &Path) -> Option<BTreeMap<usize,Note>> {
+pub fn load_from_cache(location: &Path) -> Option<BTreeMap<usize,note::Note>> {
   File::open(location)
     .ok()
     .and_then(|mut file| decode_from(&mut file, SizeLimit::Infinite).ok())
 }
 
 // Write notes to cache
-fn write_to_cache(existing: &BTreeMap<usize,Note>, location: &Path) -> Option<()> {
+pub fn write_to_cache(existing: &BTreeMap<usize,note::Note>, location: &Path) -> Option<()> {
   File::create(location)
     .ok()
     .and_then(|mut file| encode_into(existing, &mut file, SizeLimit::Infinite).ok())
 }
 
 
-fn open_list_notes(args: Vec<String>, list_or_open: bool) -> () {
+pub fn open_list_notes(args: Vec<String>, list_or_open: bool) -> () {
 
   // Options for finding notes
   let mut opts = Options::new();
@@ -81,7 +83,7 @@ fn open_list_notes(args: Vec<String>, list_or_open: bool) -> () {
 }
 
 
-fn new_note(args: Vec<String>) -> () {
+pub fn new_note(args: Vec<String>) -> () {
 
   // Options for creating a note
   let mut opts = Options::new();
@@ -99,11 +101,11 @@ fn new_note(args: Vec<String>) -> () {
   };
 
   // create the note
-  let note = Note { id: rand::random()
-                  , title: matches.opt_str("title").unwrap()
-                  , tags: matches.opt_str("tags").map(parse_tags).unwrap_or_default()
-                  , body: matches.opt_str("body").unwrap()
-                  };
+  let note = note::Note { id: rand::random()
+                        , title: matches.opt_str("title").unwrap()
+                        , tags: matches.opt_str("tags").map(note::parse_tags).unwrap_or_default()
+                        , body: matches.opt_str("body").unwrap()
+                        };
 
   // Update the cache
   match env::home_dir() {

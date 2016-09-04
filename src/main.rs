@@ -1,6 +1,16 @@
-extern crate notes;
+extern crate getopts;
+extern crate rustc_serialize;
+extern crate rand;
+extern crate bincode;
+extern crate regex;
+extern crate open;
 
 use std::env;
+
+mod note;
+mod cli;
+// mod note;
+// mod cli;
 
 fn main() {
 
@@ -12,9 +22,9 @@ fn main() {
 
 
   match args[1].as_str() {
-    "new" => notes::cli::new_note(args),
-    "open" => notes::cli::open_list_notes(args, false),
-    "list" => notes::cli::open_list_notes(args, true),
+    "new"  => cli::new_note(args),
+    "open" => cli::open_list_notes(args, false),
+    "list" => cli::open_list_notes(args, true),
     // "config" => ,
     // "update" => ,
     "help" | _ => println!("Unimplemented") // TODO print avaiable options
