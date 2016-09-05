@@ -18,33 +18,25 @@ impl Note {
     }
   }
 
-  pub fn filter_id(&self, filter: String) -> bool {
+  pub fn filter_id(&self, filter: &str) -> bool {
     filter.parse::<usize>()
       .ok()
       .map(|id| id == self.id)
       .unwrap_or(false)
   }
 
-  pub fn filter_title(&self, filter: String) -> bool {
-    Regex::new(&filter)
+  pub fn filter_title(&self, filter: &str) -> bool {
+    Regex::new(filter)
       .ok()
       .map(|re| re.is_match(&self.title))
       .unwrap_or(false)
   }
 
-  pub fn filter_tags(&self, filter: String) -> bool {
-    parse_tags(filter).is_subset(&self.tags)
+  pub fn filter_tags(&self, filter: BTreeSet<String>) -> bool {
+    filter.is_subset(&self.tags)
   }
 
-  pub fn filter_body(&self, filter: String) -> bool {
-    filter == self.body
+  pub fn filter_body(&self, filter: &str) -> bool {
+    filter == &self.body
   }
-}
-
-pub fn parse_tags(comma_delimited: String) -> BTreeSet<String> {
-  comma_delimited
-    .split(",")
-    .map(|t| String::from(t.trim()))
-    .filter(|t| t.len() > 0)
-    .collect()
 }

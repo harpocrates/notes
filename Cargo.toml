@@ -4,9 +4,9 @@ version = "0.1.0"
 authors = ["Alec Theriault"]
 
 [dependencies]
-getopts = "0.2"
 rustc-serialize = "0.3"
 rand = "0.3"
 open = "1.1.1"
 bincode = "*"
 regex = "0.1"
+clap = "2"

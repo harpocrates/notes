@@ -4,30 +4,87 @@ extern crate rand;
 extern crate bincode;
 extern crate regex;
 extern crate open;
+extern crate clap;
 
-use std::env;
+use clap::{Arg,App,SubCommand};
 
 mod note;
 mod cli;
-// mod note;
-// mod cli;
 
 fn main() {
 
-  let args: Vec<String> = env::args().collect();
-  if args.len() < 2 {
-    println!("Not enough args."); // TODO print avaiable options
-    return
+  let filter_args = [
+    Arg::with_name("title").long("title").short("t").help("regex to match to title of the note").takes_value(true),
+    Arg::with_name("body").long("body").short("b").help("note with given body path").takes_value(true).multiple(true),
+    Arg::with_name("id").long("id").short("i").help("note with exactly the given id").takes_value(true).multiple(true),
+    Arg::with_name("tags").long("tags").short("a").help("note having all given tags").takes_value(true).multiple(true),
+    Arg::with_name("lines").long("lines").short("n").help("limit for number of notes, defaults to 10").takes_value(true),
+  ];
+
+  let app_m = App::new("notes")
+    .subcommand(
+        SubCommand::with_name("new")
+          .about("Used for creating new notes")
+          .arg(Arg::with_name("title").long("title").short("t").help("title of the note").takes_value(true).required(true))
+          .arg(Arg::with_name("tags").long("tags").short("a").help("tags for the note").takes_value(true).multiple(true))
+          .arg(Arg::with_name("body").long("body").short("b").help("path to body of note").takes_value(true).required(true))
+      )
+    .subcommand(
+        SubCommand::with_name("open")
+          .about("Used for opening notes")
+          .args(&filter_args)
+      )
+    .subcommand(
+        SubCommand::with_name("list")
+          .about("Used for listing notes")
+          .args(&filter_args)
+      )
+    .subcommand(
+        SubCommand::with_name("update")
+          .about("Used for updating the tags/title/body of a note")
+          .arg(Arg::with_name("id").long("id").short("i").help("id of the note to update").takes_value(true))
+          .arg(Arg::with_name("title").long("title").short("t").help("title of the note").takes_value(true))
+          .arg(Arg::with_name("tags").long("tags").short("a").help("tags for the note").takes_value(true).multiple(true))
+          .arg(Arg::with_name("body").long("body").short("b").help("path to body of note").takes_value(true))
+      )
+    .subcommand(
+      SubCommand::with_name("drop")
+          .about("Used for forgetting notes")
+          .args(&filter_args)
+          .arg(Arg::with_name("force").long("force").short("f").help("don't ask user before dropping each note"))
+      )
+    .subcommand(
+      SubCommand::with_name("export")
+          .about("Used for exporting notes to JSON")
+          .args(&filter_args)
+          .arg(Arg::with_name("path").long("path").short("p").help("where to export notes").takes_value(true).required(true))
+          .arg(Arg::with_name("complete").long("complete").short("c").help("whether to copy the note contents too"))
+      )
+    .subcommand(
+      SubCommand::with_name("import")
+          .about("Used for importing notes to the note cache")
+          .arg(Arg::with_name("path").long("path").short("p").help("from where to import notes").takes_value(true).required(true))
+          .arg(Arg::with_name("complete").long("complete").short("c").help("whether to import the note contents too"))
+          .arg(Arg::with_name("force").long("force").short("f").help("don't ask user before overwriting notes"))
+      )
+    .get_matches();
+
+  match app_m.subcommand() {
+    ("new",    Some(new_m))    => cli::new_note(new_m),
+    ("open",   Some(open_m))   => cli::open_list_notes(open_m, true),
+    ("list",   Some(list_m))   => cli::open_list_notes(list_m, false),
+    ("update", Some(update_m)) => cli::update_note(update_m),
+    ("delete", Some(delete_m)) => println!("Unimplemented"),
+    ("export", Some(export_m)) => println!("Unimplemented"), 
+    ("import", Some(import_m)) => println!("Unimplemented"), 
+     _                         => println!("Unimplemented")
   }
-
-
-  match args[1].as_str() {
-    "new"  => cli::new_note(args),
-    "open" => cli::open_list_notes(args, false),
-    "list" => cli::open_list_notes(args, true),
-    // "config" => ,
-    // "update" => ,
-    "help" | _ => println!("Unimplemented") // TODO print avaiable options
-  };
-
 }
+
+
+/*
+TODO:
+
+ - add support for tracking files when they move (inotify)
+ - add export option to just export json, or to collect json + files
+*/
