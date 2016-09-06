@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use open;
 use std::ffi;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, RustcEncodable, RustcDecodable)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, RustcEncodable, RustcDecodable)]
 pub struct Note {
   pub id: usize,
   pub title: String,

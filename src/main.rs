@@ -1,4 +1,3 @@
-extern crate getopts;
 extern crate rustc_serialize;
 extern crate rand;
 extern crate bincode;
@@ -59,6 +58,7 @@ fn main() {
           .args(&filter_args)
           .arg(Arg::with_name("path").long("path").short("p").help("where to export notes").takes_value(true).required(true))
           .arg(Arg::with_name("complete").long("complete").short("c").help("whether to copy the note contents too"))
+          .arg(Arg::with_name("relative").long("relative").short("r").help("export with file-paths relative to export location"))
       )
     .subcommand(
       SubCommand::with_name("import")
@@ -75,7 +75,7 @@ fn main() {
     ("list",   Some(list_m))   => cli::open_list_notes(list_m, false),
     ("update", Some(update_m)) => cli::update_note(update_m),
     ("delete", Some(delete_m)) => println!("Unimplemented"),
-    ("export", Some(export_m)) => println!("Unimplemented"), 
+    ("export", Some(export_m)) => cli::export_notes(export_m), 
     ("import", Some(import_m)) => println!("Unimplemented"), 
      _                         => println!("Unimplemented")
   }
