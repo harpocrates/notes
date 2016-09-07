@@ -8,7 +8,7 @@ pub struct Note {
   pub id: usize,
   pub title: String,
   pub tags: BTreeSet<String>,
-  pub body: String
+  pub body: String,
 }
 
 impl Note {

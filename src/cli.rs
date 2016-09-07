@@ -1,6 +1,6 @@
 use bincode::rustc_serialize::{encode_into, decode_from};
 use rustc_serialize::json;
-use std::fs::{File, copy, create_dir, canonicalize};
+use std::fs::{File, canonicalize};
 use std::io::Write;
 use std::collections::BTreeMap;
 use std::env;
@@ -87,18 +87,32 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> () {
 pub fn new_note(matches: &ArgMatches) -> () {
 
   // Check path is valid
-  let body = matches.value_of("body").unwrap();
-  let path = match canonicalize(body) {
-    Err(_) => { println!("The body path '{}' is not valid.", body); return }
-    Ok(path_buf) => String::from(path_buf.as_path().to_str().unwrap())
+  let bodyO = matches
+    .value_of("body")
+    .and_then(|body| canonicalize(body).ok())
+    .and_then(|path| path.to_str())
+    .map(|path| String::from(path));
+  
+  let title = matches
+    .value_of("title")
+    .map(String::from);
+  
+  let tags = matches
+    .values_of("tags")
+    .map(|tags| tags.map(String::from).collect());
+
+  let path = match bodyO {
+    Some(body) => body,
+    None => { 
+      println!("Invalid path given for body '{}'.", matches.value_of("body").unwrap()); 
+      return 
+    }
   };
 
   // create the note
   let note = note::Note { id: rand::random()
-                        , title: matches.value_of("title").map(String::from).unwrap()
-                        , tags: matches.values_of("tags")
-                            .map(|tags| tags.map(String::from).collect())
-                            .unwrap_or_default()
+                        , title: title.unwrap()
+                        , tags: tags.unwrap_or_default()
                         , body: path
                         };
 
@@ -124,13 +138,28 @@ pub fn update_note(matches: &ArgMatches) -> () {
     .and_then(|id| cache.remove(&id));
 
   // create the updated note and insert it into the cache
+  let body = matches
+    .value_of("body")
+    .and_then(|body| canonicalize(body).ok())
+    .and_then(|path| path.to_str())
+    .map(|path| String::from(path));
+  
+  let title = matches
+    .value_of("title")
+    .map(String::from);
+  
+  let tags = matches
+    .values_of("tags")
+    .map(|tags| tags.map(String::from).collect());
+
+
   match note {
     None => { println!("Invalid id {}.", matches.value_of("id").unwrap()); return }
     Some(old_note) => {
       let new_note = note::Note { id: old_note.id
-                                , title: matches.value_of("title").map(String::from).unwrap_or(old_note.title)
-                                , tags: matches.values_of("tags").map(|tags| tags.map(String::from).collect()).unwrap_or(old_note.tags)
-                                , body: matches.value_of("body").map(String::from).unwrap_or(old_note.body)
+                                , title: title.unwrap_or(old_note.title)
+                                , tags: tags.unwrap_or(old_note.tags)
+                                , body: body.unwrap_or(old_note.body)
                                 };
 
       cache.insert(new_note.id, new_note);
@@ -147,14 +176,8 @@ pub fn update_note(matches: &ArgMatches) -> () {
 // TODO relative
 pub fn export_notes(matches: &ArgMatches) -> () {
 
-  let mut path = PathBuf::from(matches.value_of("path").unwrap());
-  let complete = matches.is_present("complete");
+  let patharg = matches.value_of("path").unwrap();
   let relative = matches.is_present("relative");
-
-  if complete {
-    create_dir(path.as_path());
-  }
-
 
   // load the matching notes from the cache
   let cache = match load_from_default_cache() {
@@ -169,46 +192,44 @@ pub fn export_notes(matches: &ArgMatches) -> () {
       & matches.values_of("body").map_or(true, |mut bodies| bodies.any(|body| note.filter_body(body)))
       & matches.values_of("id").map_or(true, |mut ids| ids.any(|id| note.filter_id(id)))
       & matches.values_of("tags").map_or(true, |tags| note.filter_tags(tags.map(String::from).collect())) });
-    .map(|note| ->
-      )
 
-  let encoded = json::encode(&matching).unwrap();
+  // branch depending on if we want our export to be relative or not
+  let to_save: Vec<&note::Note> = 
+    if relative {
+      // For relative, we want to compare the given path to the ones of notes, so we need
+      // both of these to be canonicalized.
+      let mut path = match canonicalize(patharg) {
+        Ok(path) => path,
+        Err(_) => {
+          println!("Could not canonicalize path given '{}'.", patharg);
+          return
+        },
+      };
 
+      matching.map(|note| {
+        let new_body = try!(path_relative_from(path, &Path::from(note.body))
+          .and_then(|buf| buf.to_str())
+          .ok_or("Failed to get relative path of note '{}'.", note.id));
 
-  if !complete {
-    File::create(path.as_path())
-      .ok()
-      .and_then(|mut file| file.write(encoded.as_bytes()).ok());
-  } else {
-    create_dir(path.as_path());
+        note::Note { id: note.id
+                   , title: note.title
+                   , tags: note.tags
+                   , body: new_body
+                   }
+      }).collect()
+    } else {
+      // otherwise, we just want to save `matching` straight up as is.
+      matching.collect()
+    };
 
-    path.push("notes-cache.json");
-    File::create(path.as_path())
-      .ok()
-      .and_then(|mut file| file.write(encoded.as_bytes()).ok());
-    path.pop();
-    
-    for note in matching {
-      path.push(note.title.clone());
-      copy(note.body.clone(), path.as_path());
-      path.pop();
-    }
-  };
+  let encoded = json::encode(&to_save).unwrap();
+
+  File::create(patharg)
+    .ok()
+    .and_then(|mut file| file.write(encoded.as_bytes()).ok());
 }
 
-impl Path {
-  pub fn relative_to<P: AsRef<Path>>(&self, path: P) -> Result<Path, std::io::Error> {
-    let mut self1 = try!(canonicalize(self)).components();
-    let mut path1 = try!(canonicalize(path)).components();
 
-    loop {
-
-    }
-
-
-
-  }
-}
 
 
 // This routine is adapted from the *old* Path's `path_relative_from`

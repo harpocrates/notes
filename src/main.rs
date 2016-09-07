@@ -57,14 +57,13 @@ fn main() {
           .about("Used for exporting notes to JSON")
           .args(&filter_args)
           .arg(Arg::with_name("path").long("path").short("p").help("where to export notes").takes_value(true).required(true))
-          .arg(Arg::with_name("complete").long("complete").short("c").help("whether to copy the note contents too"))
           .arg(Arg::with_name("relative").long("relative").short("r").help("export with file-paths relative to export location"))
       )
     .subcommand(
       SubCommand::with_name("import")
           .about("Used for importing notes to the note cache")
           .arg(Arg::with_name("path").long("path").short("p").help("from where to import notes").takes_value(true).required(true))
-          .arg(Arg::with_name("complete").long("complete").short("c").help("whether to import the note contents too"))
+          .arg(Arg::with_name("relative").long("relative").short("r").help("export with file-paths relative to export location"))
           .arg(Arg::with_name("force").long("force").short("f").help("don't ask user before overwriting notes"))
       )
     .get_matches();
@@ -85,6 +84,7 @@ fn main() {
 /*
 TODO:
 
+ - convert error handling to Result<(),String>
  - add support for tracking files when they move (inotify)
  - add export option to just export json, or to collect json + files
 */
