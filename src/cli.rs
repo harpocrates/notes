@@ -60,15 +60,15 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
     .unwrap_or(10);
   
   // print the matching notes
-  println!("Note UUID  | Title                | Tags                    | Body            ");
-  println!("-----------+----------------------+-------------------------+-----------------");
+  println!("Note UUID        | Title                | Tags                    | Date     ");
+  println!("-----------------+----------------------+-------------------------+----------");
 
   for note in matching.by_ref().take(num_display) {
-    println!("{:010} | {: <20} | {: <23} | {: <17}",
+    println!("{:016X} | {: <20} | {: <23} | ",
       note.id,
       note.title,
       note.tags.iter().fold(String::new(), |s,tag| if s!="" { s+" "+ &tag } else { s+&tag }),
-      note.body);
+    );
 
     if open {
       note.open();
@@ -93,18 +93,15 @@ pub fn drop_notes(matches: &ArgMatches) -> Result<(),String> {
     println!("Are you sure you want to delete note '{}' [{}]", note.title, note.id.to_string());
     let _ = stdout().flush();
 
-    let mut output = false;
     loop {
       let mut input = String::new();
       let _ = stdin().read_line(&mut input);
       match input.as_ref() {
-        "y" | "yes" => { output = true; break },
-        "n" | "no"  => { output = false; break },
+        "y" | "yes" => return true,
+        "n" | "no"  => return false,
         _ => println!("Invalid response. Expecting 'yes' or 'no'."),
       }
     };
-
-    output
   }
 
   // load the matching notes from the cache
@@ -167,8 +164,8 @@ pub fn update_note(matches: &ArgMatches) -> Result<(),String> {
   let mut cache = load_from_default_cache().ok().unwrap_or_default();
 
   // find and remove from the cache the note
-  let old_note = try!(matches.value_of("id").unwrap()
-    .parse::<usize>().map_err(|_| "malformed id given")
+  let old_note = try!(usize::from_str_radix(matches.value_of("id").unwrap(),16)
+    .map_err(|_| "malformed id given")
     .and_then(|id| cache.remove(&id).ok_or("No note with specified id found")));
 
   // create the updated note and insert it into the cache
@@ -225,7 +222,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
       matching.map(|note| {
         let body_path = PathBuf::from(note.body.clone());
 
-        path_relative_from(&path, &body_path)
+        path_relative_from(&body_path, &path)
           .and_then(|buf| buf.to_str().map(|b| String::from(b)))
           .map(|new_body|
             note::Note { id: note.id.clone()

@@ -23,7 +23,7 @@ impl Note {
   }
 
   pub fn filter_id(&self, filter: &str) -> bool {
-    filter.parse::<usize>()
+    usize::from_str_radix(filter,16)
       .ok()
       .map(|id| id == self.id)
       .unwrap_or(false)
