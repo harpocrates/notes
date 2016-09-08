@@ -2,6 +2,10 @@ use regex::Regex;
 use std::collections::BTreeSet;
 use open;
 use std::ffi;
+use std::fs::canonicalize;
+use std::path::Path;
+use std::fmt::Display;
+
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, RustcEncodable, RustcDecodable)]
 pub struct Note {
@@ -39,4 +43,10 @@ impl Note {
   pub fn filter_body(&self, filter: &str) -> bool {
     filter == &self.body
   }
+}
+
+pub fn sanitize_path<P: AsRef<Path> + Display + Clone>(path: P) -> Result<String,String> {
+  canonicalize(path.as_ref())
+    .map_err(|_| format!("cannot canonicalize path {}", path.clone()))
+    .map(|path| String::from(path.to_str().unwrap()))
 }

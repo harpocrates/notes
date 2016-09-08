@@ -68,15 +68,19 @@ fn main() {
       )
     .get_matches();
 
-  match app_m.subcommand() {
+  let result = match app_m.subcommand() {
     ("new",    Some(new_m))    => cli::new_note(new_m),
     ("open",   Some(open_m))   => cli::open_list_notes(open_m, true),
     ("list",   Some(list_m))   => cli::open_list_notes(list_m, false),
     ("update", Some(update_m)) => cli::update_note(update_m),
-    ("delete", Some(delete_m)) => println!("Unimplemented"),
+    ("drop",   Some(drop_m))   => cli::drop_notes(drop_m),
     ("export", Some(export_m)) => cli::export_notes(export_m), 
-    ("import", Some(import_m)) => println!("Unimplemented"), 
-     _                         => println!("Unimplemented")
+    ("import", Some(import_m)) => Err(String::from("Unimplemented")), 
+     _                         => Err(String::from("Unimplemented")),
+  };
+
+  for e in result.err() {
+    println!("Notes ran into a problem: {}", e);
   }
 }
 
@@ -84,7 +88,7 @@ fn main() {
 /*
 TODO:
 
- - convert error handling to Result<(),String>
+ - convert error handling to Result<(),...some enum type...>
  - add support for tracking files when they move (inotify)
  - add export option to just export json, or to collect json + files
 */
