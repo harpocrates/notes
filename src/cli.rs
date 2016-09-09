@@ -64,7 +64,7 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
   println!("-----------------+----------------------+-------------------------+----------");
 
   for note in matching.by_ref().take(num_display) {
-    println!("{:016X} | {: <20} | {: <23} | ",
+    println!("{:016X} | {: <21.21}| {: <24.24}| ",
       note.id,
       note.title,
       note.tags.iter().fold(String::new(), |s,tag| if s!="" { s+" "+ &tag } else { s+&tag }),

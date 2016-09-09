@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::collections::BTreeSet;
 use open;
-use std::ffi;
+use std::ffi::OsStr;
 use std::fs::canonicalize;
 use std::path::Path;
 use std::fmt::Display;
@@ -17,7 +17,7 @@ pub struct Note {
 
 impl Note {
   pub fn open(&self) -> () {
-    if !open::that(AsRef::<ffi::OsStr>::as_ref(&self.body)).is_ok() {
+    if !open::that(AsRef::<OsStr>::as_ref(&self.body)).is_ok() {
       println!("Failed to open note.");
     }
   }
@@ -41,7 +41,9 @@ impl Note {
   }
 
   pub fn filter_body(&self, filter: &str) -> bool {
-    filter == &self.body
+    sanitize_path(filter)
+      .map(|sanitized| sanitized == self.body)
+      .unwrap_or(false)
   }
 }
 
