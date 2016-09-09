@@ -20,6 +20,11 @@ fn main() {
     Arg::with_name("lines").long("lines").short("n").help("limit for number of notes, defaults to 10").takes_value(true),
   ];
 
+  let import_export_args = [
+    Arg::with_name("path").long("path").short("p").help("where to export notes").takes_value(true).required(true),
+    Arg::with_name("relative").long("relative").short("r").help("export with file-paths relative to export location"),
+  ];
+
   let app_m = App::new("notes")
     .subcommand(
         SubCommand::with_name("new")
@@ -37,6 +42,7 @@ fn main() {
         SubCommand::with_name("list")
           .about("Used for listing notes")
           .args(&filter_args)
+          .arg(Arg::with_name("long").long("long").short("l").help("list all information about note"))
       )
     .subcommand(
         SubCommand::with_name("update")
@@ -56,14 +62,12 @@ fn main() {
       SubCommand::with_name("export")
           .about("Used for exporting notes to JSON")
           .args(&filter_args)
-          .arg(Arg::with_name("path").long("path").short("p").help("where to export notes").takes_value(true).required(true))
-          .arg(Arg::with_name("relative").long("relative").short("r").help("export with file-paths relative to export location"))
+          .args(&import_export_args)
       )
     .subcommand(
       SubCommand::with_name("import")
           .about("Used for importing notes to the note cache")
-          .arg(Arg::with_name("path").long("path").short("p").help("from where to import notes").takes_value(true).required(true))
-          .arg(Arg::with_name("relative").long("relative").short("r").help("export with file-paths relative to export location"))
+          .args(&import_export_args)
           .arg(Arg::with_name("force").long("force").short("f").help("don't ask user before overwriting notes"))
       )
     .get_matches();
@@ -87,8 +91,6 @@ fn main() {
 
 /*
 TODO:
-
  - convert error handling to Result<(),...some enum type...>
  - add support for tracking files when they move (inotify)
- - add export option to just export json, or to collect json + files
 */

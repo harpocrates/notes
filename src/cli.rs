@@ -60,16 +60,30 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
     .and_then(|s| s.parse::<usize>().ok())
     .unwrap_or(10);
   
+  let long = matches.is_present("long");
+
   // print the matching notes
-  println!("Note UUID        | Title                | Tags                    | Date     ");
-  println!("-----------------+----------------------+-------------------------+----------");
+  if open || !long {
+    println!("Note UUID        | Title                  | Tags                               ");
+    println!("-----------------+------------------------+------------------------------------");
+  } else {
+    println!("Notes found:");
+    println!("-------------")
+  }
 
   for note in matching.by_ref().take(num_display) {
-    println!("{:016X} | {: <21.21}| {: <24.24}| ",
-      note.id,
-      note.title,
-      note.tags.iter().fold(String::new(), |s,tag| if s!="" { s+" "+ &tag } else { s+&tag }),
-    );
+    
+    let tags = note.tags.iter().fold(String::new(), |s,tag| if s!="" { s+" "+ &tag } else { s+&tag });
+
+    if open || !long {
+      println!("{:016X} | {: <23.23}| {: <35.35}", note.id, note.title, tags);
+    } else {
+      println!("  ID:    {:016X}", note.id);
+      println!("  Title: {}", note.title);
+      println!("  Tags:  {}", tags);
+      println!("  Body:  {}", note.body);
+      println!("-------------")
+    }
 
     if open {
       note.open();
@@ -79,7 +93,7 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
   // remind the user about remaining undisplayed/unopened notes (if there are any)
   let remaining = matching.count();
   if remaining > 0 {
-    println!("There are {} matching notes not {}.", remaining, if open { "opened" } else { "listed" });
+    println!("{} matching note(s) was not {}.", remaining, if open { "opened" } else { "listed" });
   }
 
   Ok(())
@@ -91,16 +105,19 @@ pub fn drop_notes(matches: &ArgMatches) -> Result<(),String> {
   fn prompt_user(note: &note::Note) -> bool {
     use std::io::{stdin,stdout,Write};
 
-    println!("Are you sure you want to delete note '{}' [{}]", note.title, note.id.to_string());
+    println!("Are you sure you want to delete note '{}' [{:016X}]", note.title, note.id);
     let _ = stdout().flush();
 
     loop {
       let mut input = String::new();
       let _ = stdin().read_line(&mut input);
-      match input.as_ref() {
-        "y" | "yes" => return true,
-        "n" | "no"  => return false,
-        _ => println!("Invalid response. Expecting 'yes' or 'no'."),
+      
+      if input.starts_with("y") || input.starts_with("yes") {
+        return true;
+      } else if input.starts_with("n") || input.starts_with("no") {
+        return false;
+      } else {
+        println!("Invalid response. Expecting 'yes' or 'no'.");
       }
     };
   }
@@ -111,17 +128,17 @@ pub fn drop_notes(matches: &ArgMatches) -> Result<(),String> {
   let new_cache = old_cache
     .into_iter()
     .filter(|&(_, ref note)| -> bool {
-        (!matches.value_of("title").map_or(true, |title| note.filter_title(title))
-        | !matches.values_of("body").map_or(true, |mut bodies| bodies.any(|body| note.filter_body(body)))
-        | !matches.values_of("id").map_or(true, |mut ids| ids.any(|id| note.filter_id(id)))
-        | !matches.values_of("tags").map_or(true, |tags| note.filter_tags(tags.map(String::from).collect())))
-      && matches.is_present("force") || prompt_user(&note) 
+        ( !matches.value_of("title").map_or(true, |title| note.filter_title(title))
+        || !matches.values_of("body").map_or(true, |mut bodies| bodies.any(|body| note.filter_body(body)))
+        || !matches.values_of("id").map_or(true, |mut ids| ids.any(|id| note.filter_id(id)))
+        || !matches.values_of("tags").map_or(true, |tags| note.filter_tags(tags.map(String::from).collect())))
+        || !(matches.is_present("force") || prompt_user(&note)) 
     })
     .collect();
 
   // save the updated cache
   try!(write_to_default_cache(&new_cache));
-  println!("Note updated.");
+  println!("Note cache updated.");
 
   Ok(())
 }
@@ -190,7 +207,7 @@ pub fn update_note(matches: &ArgMatches) -> Result<(),String> {
   
   // save the updated cache
   try!(write_to_default_cache(&cache));
-  println!("Note updated.");
+  println!("Note cache updated.");
 
   Ok(())
 }
@@ -203,6 +220,8 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
 
   // load the matching notes from the cache
   let cache = try!(load_from_default_cache());
+
+  let mut file = try!(File::create(patharg).map_err(|_| "cannot create export file"));
 
   let matching = cache
     .values()
@@ -218,7 +237,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
       // For relative, we want to compare the given path to the ones of notes, so we need
       // both of these to be canonicalized.
       let path = try!(canonicalize(patharg)
-        .map_err(|_| format!("Could not canonicalize path given '{}'.", patharg)));
+        .map_err(|_| format!("could not canonicalize path given '{}'.", patharg)));
       
       let mut folder = path.clone();
       folder.pop();
@@ -235,7 +254,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
                        , body: String::from(new_body)
                        }
             )
-          .ok_or(format!("Failed to get relative path of note '{}'.", note.id))
+          .ok_or(format!("failed to get relative path of note '{:016X}'.", note.id))
       }).collect()
     } else {
       // otherwise, we just want to save `matching` straight up as is.
@@ -245,9 +264,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
 
   let encoded = try!(json::encode(&to_save).map_err(|_| "cannot generate json to export"));
 
-  try!(File::create(patharg)
-    .map_err(|_| "cannot create export file")
-    .and_then(|mut file| file.write(encoded.as_bytes()).map_err(|_| "cannot write to export file")));
+  try!(file.write(encoded.as_bytes()).map_err(|_| "cannot write to export file"));
 
   Ok(())
 }
@@ -258,16 +275,19 @@ pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
   fn prompt_user(note: &note::Note) -> bool {
     use std::io::{stdin,stdout,Write};
 
-    println!("It appears the the note {} [{}] already exists. Do you want to overwrite it?", note.title, note.id.to_string());
+    println!("A note with ID {:016X}] already exists. Do you want to overwrite it?", note.id);
     let _ = stdout().flush();
 
     loop {
       let mut input = String::new();
       let _ = stdin().read_line(&mut input);
-      match input.as_ref() {
-        "y" | "yes" => return true,
-        "n" | "no"  => return false,
-        _ => println!("Invalid response. Expecting 'yes' or 'no'."),
+      
+      if input.starts_with("y") || input.starts_with("yes") {
+        return true;
+      } else if input.starts_with("n") || input.starts_with("no") {
+        return false;
+      } else {
+        println!("Invalid response. Expecting 'yes' or 'no'.");
       }
     };
   }
@@ -284,24 +304,29 @@ pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
 
   let to_import: Vec<note::Note> = try!(json::decode(&data).map_err(|_| "cannot decode json to import"));
 
-  // branch depending on if we want our export to be relative or not
+  // branch depending on if we want our import to be relative or not
   for note in to_import {
     let new_body = if relative {
-      let path = Path::new(patharg).join(note.body.clone());
+      let mut path1 = PathBuf::new();
+      path1.push(patharg);
+      path1.pop();
+      path1.push(note.body.clone());
+      
+      let path = try!(canonicalize(path1).map_err(|_| "cannot resolve path of imported note"));
       let p = try!(path.to_str().ok_or("cannot resolve absolute path"));
       String::from(p)
     } else {
       note.body.clone()
     };
 
-    if !cache.contains_key(&note.id) && prompt_user(&note) {
+    if !cache.contains_key(&note.id) || prompt_user(&note) {
       let _ = cache.insert(note.id, note::Note { id: note.id, title: note.title, tags: note.tags, body: new_body });
     }
   }
 
   // save the updated cache
   try!(write_to_default_cache(&cache));
-  println!("Note updated.");
+  println!("Note cache updated.");
     
   Ok(())
 }
