@@ -1,10 +1,13 @@
-use regex::Regex;
-use std::collections::BTreeSet;
 use open;
+use regex::Regex;
+
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs::canonicalize;
 use std::path::Path;
-use std::fmt::Display;
+
+use error::Error;
 
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, RustcEncodable, RustcDecodable)]
@@ -47,8 +50,8 @@ impl Note {
   }
 }
 
-pub fn sanitize_path<P: AsRef<Path> + Display + Clone>(path: P) -> Result<String,String> {
+pub fn sanitize_path<P: AsRef<Path> + Display>(path: P) -> Result<String,Error> {
   canonicalize(path.as_ref())
-    .map_err(|_| format!("cannot canonicalize path {}", path.clone()))
+    .map_err(|_| Error::Canonicalize(path.to_string()))
     .map(|path| String::from(path.to_str().unwrap()))
 }

@@ -1,6 +1,6 @@
 [package]
 name = "notes"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Alec Theriault"]
 
 [dependencies]
@@ -8,5 +8,6 @@ rustc-serialize = "0.3"
 rand = "0.3"
 open = "1.1.1"
 bincode = "*"
+notify = "2.6.3"
 regex = "0.1"
 clap = "2"

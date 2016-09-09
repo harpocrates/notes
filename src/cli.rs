@@ -1,48 +1,48 @@
 use bincode::rustc_serialize::{encode_into, decode_from};
+use bincode::SizeLimit;
+use clap::ArgMatches;
+use rand;
 use rustc_serialize::json;
-use std::fs::{File, canonicalize};
-use std::io::Write;
-use std::io::Read;
+
 use std::collections::{BTreeSet, BTreeMap};
 use std::env;
-use bincode::SizeLimit;
+use std::fs::{File, canonicalize};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use rand;
-use clap::ArgMatches;
 
 use note;
-
+use error::Error;
 
 // Load notes from cache
-pub fn load_from_cache(location: &Path) -> Result<BTreeMap<usize,note::Note>,String> {
-  let mut file = try!(File::open(location).map_err(|_| "cannot open cache"));
+pub fn load_from_cache(location: &Path) -> Result<BTreeMap<usize,note::Note>,Error> {
+  let mut file = try!(File::open(location).map_err(|_| Error::OpenCache));
   decode_from(&mut file, SizeLimit::Infinite)
-    .map_err(|_| String::from("cannot decode cache"))
+    .map_err(|_| Error::DecodeCache)
 }
 
 // Write notes to cache
-pub fn write_to_cache(existing: &BTreeMap<usize,note::Note>, location: &Path) -> Result<(),String> {
-  let mut file = try!(File::create(location).map_err(|_| "cannot create cache"));
+pub fn write_to_cache(existing: &BTreeMap<usize,note::Note>, location: &Path) -> Result<(),Error> {
+  let mut file = try!(File::create(location).map_err(|_| Error::CreateCache));
   encode_into(existing, &mut file, SizeLimit::Infinite)
-    .map_err(|_| String::from("cannot encode cache"))
+    .map_err(|_| Error::EncodeCache)
 }
 
 // Load notes from cache
-pub fn load_from_default_cache() -> Result<BTreeMap<usize,note::Note>,String> {
-  let mut home = try!(env::home_dir().ok_or("failed to find home directory"));
+pub fn load_from_default_cache() -> Result<BTreeMap<usize,note::Note>,Error> {
+  let mut home = try!(env::home_dir().ok_or(Error::HomeDir));
   home.push(".notes-cache");
   load_from_cache(home.as_path())
 }
 
 // Write notes to cache
-pub fn write_to_default_cache(existing: &BTreeMap<usize,note::Note>) -> Result<(),String> {
-  let mut home = try!(env::home_dir().ok_or("failed to find home directory"));
+pub fn write_to_default_cache(existing: &BTreeMap<usize,note::Note>) -> Result<(),Error> {
+  let mut home = try!(env::home_dir().ok_or(Error::HomeDir));
   home.push(".notes-cache");
   write_to_cache(existing, home.as_path())
 }
 
 
-pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
+pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),Error> {
 
   // load the matching notes from the cache
   let cache = try!(load_from_default_cache());
@@ -100,7 +100,7 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
 }
 
 
-pub fn drop_notes(matches: &ArgMatches) -> Result<(),String> {
+pub fn drop_notes(matches: &ArgMatches) -> Result<(),Error> {
 
   fn prompt_user(note: &note::Note) -> bool {
     use std::io::{stdin,stdout,Write};
@@ -145,7 +145,7 @@ pub fn drop_notes(matches: &ArgMatches) -> Result<(),String> {
 
 
 
-pub fn new_note(matches: &ArgMatches) -> Result<(),String> {
+pub fn new_note(matches: &ArgMatches) -> Result<(),Error> {
 
   // Check path is valid
   let body = try!(note::sanitize_path(matches.value_of("body").unwrap()));
@@ -176,15 +176,15 @@ pub fn new_note(matches: &ArgMatches) -> Result<(),String> {
 }
 
 
-pub fn update_note(matches: &ArgMatches) -> Result<(),String> {
+pub fn update_note(matches: &ArgMatches) -> Result<(),Error> {
 
   // load the cache
   let mut cache = try!(load_from_default_cache());
 
   // find and remove from the cache the note
   let old_note = try!(usize::from_str_radix(matches.value_of("id").unwrap(),16)
-    .map_err(|_| "malformed id given")
-    .and_then(|id| cache.remove(&id).ok_or("No note with specified id found")));
+    .map_err(|_| Error::MalformedId)
+    .and_then(|id| cache.remove(&id).ok_or(Error::NoSuchNote(id))));
 
   // create the updated note and insert it into the cache
   let body: Option<String> = match matches.value_of("body") {
@@ -213,7 +213,7 @@ pub fn update_note(matches: &ArgMatches) -> Result<(),String> {
 }
 
 
-pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
+pub fn export_notes(matches: &ArgMatches) -> Result<(),Error> {
 
   let patharg = matches.value_of("path").unwrap();
   let relative = matches.is_present("relative");
@@ -221,7 +221,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
   // load the matching notes from the cache
   let cache = try!(load_from_default_cache());
 
-  let mut file = try!(File::create(patharg).map_err(|_| "cannot create export file"));
+  let mut file = try!(File::create(patharg).map_err(|_| Error::CreateExport));
 
   let matching = cache
     .values()
@@ -236,8 +236,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
     if relative {
       // For relative, we want to compare the given path to the ones of notes, so we need
       // both of these to be canonicalized.
-      let path = try!(canonicalize(patharg)
-        .map_err(|_| format!("could not canonicalize path given '{}'.", patharg)));
+      let path = try!(canonicalize(patharg).map_err(|_| Error::Canonicalize(String::from(patharg))));
       
       let mut folder = path.clone();
       folder.pop();
@@ -254,7 +253,7 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
                        , body: String::from(new_body)
                        }
             )
-          .ok_or(format!("failed to get relative path of note '{:016X}'.", note.id))
+          .ok_or(Error::RelativePath(note.id))
       }).collect()
     } else {
       // otherwise, we just want to save `matching` straight up as is.
@@ -262,15 +261,15 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
     }
   );
 
-  let encoded = try!(json::encode(&to_save).map_err(|_| "cannot generate json to export"));
+  let encoded = try!(json::encode(&to_save).map_err(|_| Error::JsonEncode));
 
-  try!(file.write(encoded.as_bytes()).map_err(|_| "cannot write to export file"));
+  try!(file.write(encoded.as_bytes()).map_err(|_| Error::WriteExport));
 
   Ok(())
 }
 
 
-pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
+pub fn import_notes(matches: &ArgMatches) -> Result<(),Error> {
 
   fn prompt_user(note: &note::Note) -> bool {
     use std::io::{stdin,stdout,Write};
@@ -298,11 +297,11 @@ pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
   // load the matching notes from the cache
   let mut cache = load_from_default_cache().ok().unwrap_or_default();
 
-  let mut file = try!(File::open(patharg).map_err(|_| "cannot open import file"));
+  let mut file = try!(File::open(patharg).map_err(|_| Error::ReadExport));
   let mut data = String::new();
-  try!(file.read_to_string(&mut data).map_err(|_| "cannot read import file"));
+  try!(file.read_to_string(&mut data).map_err(|_| Error::ReadExport));
 
-  let to_import: Vec<note::Note> = try!(json::decode(&data).map_err(|_| "cannot decode json to import"));
+  let to_import: Vec<note::Note> = try!(json::decode(&data).map_err(|_| Error::JsonDecode));
 
   // branch depending on if we want our import to be relative or not
   for note in to_import {
@@ -312,9 +311,9 @@ pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
       path1.pop();
       path1.push(note.body.clone());
       
-      let path = try!(canonicalize(path1).map_err(|_| "cannot resolve path of imported note"));
-      let p = try!(path.to_str().ok_or("cannot resolve absolute path"));
-      String::from(p)
+      let path = try!(canonicalize(path1).map_err(|_| Error::Canonicalize(String::from(patharg))));
+
+      String::from(try!(path.to_str().ok_or(Error::Canonicalize(String::from(patharg)))))
     } else {
       note.body.clone()
     };
@@ -330,8 +329,6 @@ pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
     
   Ok(())
 }
-
-
 
 
 // This routine is adapted from the *old* Path's `path_relative_from`
@@ -377,6 +374,3 @@ fn path_relative_from(path: &PathBuf, base: &PathBuf) -> Option<PathBuf> {
         Some(comps.iter().map(|c| c.as_os_str()).collect())
     }
 }
-
-
-

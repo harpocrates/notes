@@ -1,14 +1,16 @@
-extern crate rustc_serialize;
-extern crate rand;
 extern crate bincode;
-extern crate regex;
-extern crate open;
 extern crate clap;
+extern crate notify;
+extern crate open;
+extern crate rand;
+extern crate regex;
+extern crate rustc_serialize;
 
 use clap::{Arg,App,SubCommand};
 
 mod note;
 mod cli;
+mod error;
 
 fn main() {
 
@@ -80,17 +82,16 @@ fn main() {
     ("drop",   Some(drop_m))   => cli::drop_notes(drop_m),
     ("export", Some(export_m)) => cli::export_notes(export_m), 
     ("import", Some(import_m)) => cli::import_notes(import_m), 
-     _                         => Err(String::from("Unimplemented")),
+     _                         => panic!("Unimplemented"),
   };
 
   for e in result.err() {
-    println!("Notes ran into a problem: {}", e);
+    println!("Notes ran into a problem: {}.", error::print_error(e));
   }
 }
 
 
 /*
 TODO:
- - convert error handling to Result<(),...some enum type...>
- - add support for tracking files when they move (inotify)
+ - add support for tracking files when they move (notify)
 */
