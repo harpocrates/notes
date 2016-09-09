@@ -2,6 +2,7 @@ use bincode::rustc_serialize::{encode_into, decode_from};
 use rustc_serialize::json;
 use std::fs::{File, canonicalize};
 use std::io::Write;
+use std::io::Read;
 use std::collections::{BTreeSet, BTreeMap};
 use std::env;
 use bincode::SizeLimit;
@@ -86,7 +87,7 @@ pub fn open_list_notes(matches: &ArgMatches, open: bool) -> Result<(),String> {
 
 
 pub fn drop_notes(matches: &ArgMatches) -> Result<(),String> {
-  
+
   fn prompt_user(note: &note::Note) -> bool {
     use std::io::{stdin,stdout,Write};
 
@@ -161,7 +162,7 @@ pub fn new_note(matches: &ArgMatches) -> Result<(),String> {
 pub fn update_note(matches: &ArgMatches) -> Result<(),String> {
 
   // load the cache
-  let mut cache = load_from_default_cache().ok().unwrap_or_default();
+  let mut cache = try!(load_from_default_cache());
 
   // find and remove from the cache the note
   let old_note = try!(usize::from_str_radix(matches.value_of("id").unwrap(),16)
@@ -194,7 +195,7 @@ pub fn update_note(matches: &ArgMatches) -> Result<(),String> {
   Ok(())
 }
 
-// TODO relative
+
 pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
 
   let patharg = matches.value_of("path").unwrap();
@@ -218,11 +219,14 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
       // both of these to be canonicalized.
       let path = try!(canonicalize(patharg)
         .map_err(|_| format!("Could not canonicalize path given '{}'.", patharg)));
+      
+      let mut folder = path.clone();
+      folder.pop();
 
       matching.map(|note| {
         let body_path = PathBuf::from(note.body.clone());
 
-        path_relative_from(&body_path, &path)
+        path_relative_from(&body_path, &folder)
           .and_then(|buf| buf.to_str().map(|b| String::from(b)))
           .map(|new_body|
             note::Note { id: note.id.clone()
@@ -239,11 +243,66 @@ pub fn export_notes(matches: &ArgMatches) -> Result<(),String> {
     }
   );
 
-  let encoded = json::encode(&to_save).unwrap();
+  let encoded = try!(json::encode(&to_save).map_err(|_| "cannot generate json to export"));
 
-  File::create(patharg)
-    .ok()
-    .and_then(|mut file| file.write(encoded.as_bytes()).ok());
+  try!(File::create(patharg)
+    .map_err(|_| "cannot create export file")
+    .and_then(|mut file| file.write(encoded.as_bytes()).map_err(|_| "cannot write to export file")));
+
+  Ok(())
+}
+
+
+pub fn import_notes(matches: &ArgMatches) -> Result<(),String> {
+
+  fn prompt_user(note: &note::Note) -> bool {
+    use std::io::{stdin,stdout,Write};
+
+    println!("It appears the the note {} [{}] already exists. Do you want to overwrite it?", note.title, note.id.to_string());
+    let _ = stdout().flush();
+
+    loop {
+      let mut input = String::new();
+      let _ = stdin().read_line(&mut input);
+      match input.as_ref() {
+        "y" | "yes" => return true,
+        "n" | "no"  => return false,
+        _ => println!("Invalid response. Expecting 'yes' or 'no'."),
+      }
+    };
+  }
+
+  let patharg = matches.value_of("path").unwrap();
+  let relative = matches.is_present("relative");
+
+  // load the matching notes from the cache
+  let mut cache = load_from_default_cache().ok().unwrap_or_default();
+
+  let mut file = try!(File::open(patharg).map_err(|_| "cannot open import file"));
+  let mut data = String::new();
+  try!(file.read_to_string(&mut data).map_err(|_| "cannot read import file"));
+
+  let to_import: Vec<note::Note> = try!(json::decode(&data).map_err(|_| "cannot decode json to import"));
+
+  // branch depending on if we want our export to be relative or not
+  for note in to_import {
+    let new_body = if relative {
+      let path = Path::new(patharg).join(note.body.clone());
+      let p = try!(path.to_str().ok_or("cannot resolve absolute path"));
+      String::from(p)
+    } else {
+      note.body.clone()
+    };
+
+    if !cache.contains_key(&note.id) && prompt_user(&note) {
+      let _ = cache.insert(note.id, note::Note { id: note.id, title: note.title, tags: note.tags, body: new_body });
+    }
+  }
+
+  // save the updated cache
+  try!(write_to_default_cache(&cache));
+  println!("Note updated.");
+    
   Ok(())
 }
 
@@ -293,3 +352,6 @@ fn path_relative_from(path: &PathBuf, base: &PathBuf) -> Option<PathBuf> {
         Some(comps.iter().map(|c| c.as_os_str()).collect())
     }
 }
+
+
+

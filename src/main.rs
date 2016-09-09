@@ -75,7 +75,7 @@ fn main() {
     ("update", Some(update_m)) => cli::update_note(update_m),
     ("drop",   Some(drop_m))   => cli::drop_notes(drop_m),
     ("export", Some(export_m)) => cli::export_notes(export_m), 
-    ("import", Some(import_m)) => Err(String::from("Unimplemented")), 
+    ("import", Some(import_m)) => cli::import_notes(import_m), 
      _                         => Err(String::from("Unimplemented")),
   };
 
